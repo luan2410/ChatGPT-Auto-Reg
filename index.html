@@ -1,0 +1,758 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account Code Manager</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --panel-3: #0b1220;
+      --border: #334155;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --primary: #38bdf8;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: linear-gradient(180deg, #020617, var(--bg)); color: var(--text); min-height: 100vh; }
+    .container { max-width: 1500px; margin: 0 auto; padding: 24px; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
+    .subtitle { color: var(--muted); margin: 8px 0 0; }
+    .badge { background: rgba(56,189,248,.12); color: #bae6fd; border: 1px solid rgba(56,189,248,.4); padding: 8px 12px; border-radius: 999px; font-size: 13px; white-space: nowrap; }
+    .layout { display: grid; grid-template-columns: 360px 420px 1fr; gap: 18px; align-items: start; }
+    .card { background: rgba(17,24,39,.96); border: 1px solid var(--border); border-radius: 16px; padding: 18px; }
+    .card h2, .card h3, .card p { margin-top: 0; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 13px; color: #cbd5e1; margin-bottom: 6px; }
+    .field input, .field textarea { width: 100%; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); padding: 11px 13px; outline: none; }
+    .field textarea { resize: vertical; min-height: 120px; font-family: Consolas, monospace; font-size: 12px; }
+    .actions, .toolbar, .account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    button { border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 700; }
+    .btn-primary { background: var(--primary); color: #082f49; }
+    .btn-secondary { background: #334155; color: white; }
+    .btn-success { background: var(--success); color: #052e16; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-warning { background: var(--warning); color: #431407; }
+    .status { margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 14px; display: none; white-space: pre-wrap; }
+    .status.show { display: block; }
+    .status.info { background: rgba(56,189,248,.12); color: #bae6fd; border: 1px solid rgba(56,189,248,.4); }
+    .status.success { background: rgba(34,197,94,.12); color: #bbf7d0; border: 1px solid rgba(34,197,94,.4); }
+    .status.error { background: rgba(239,68,68,.12); color: #fecaca; border: 1px solid rgba(239,68,68,.4); }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .list-box { display: grid; gap: 10px; max-height: 620px; overflow: auto; padding-right: 4px; }
+    .list-item, .account-item { border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2); padding: 12px; cursor: pointer; }
+    .list-item.active, .account-item.active { border-color: var(--primary); box-shadow: inset 0 0 0 1px rgba(56,189,248,.35); }
+    .list-name, .account-email { font-weight: 700; margin-bottom: 6px; word-break: break-word; }
+    .meta { color: var(--muted); font-size: 12px; word-break: break-word; }
+    .empty { color: var(--muted); text-align: center; border: 1px dashed var(--border); border-radius: 12px; padding: 28px 16px; }
+    .result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .meta-box { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .meta-label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .meta-value { font-size: 15px; font-weight: 700; word-break: break-word; }
+    .code-box { background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.35); color: #bbf7d0; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+    .code-value { font-size: 34px; font-weight: 800; letter-spacing: 2px; margin-top: 6px; }
+    .message-box, .json-box { background: var(--panel-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; font-size: 13px; line-height: 1.5; }
+    .debug-grid { display: grid; grid-template-columns: 260px 1fr; gap: 12px; margin-top: 14px; }
+    .debug-summary { display: grid; gap: 10px; }
+    .debug-card { background: var(--panel-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .debug-title { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .debug-value { font-size: 14px; font-weight: 700; word-break: break-word; }
+    .debug-steps { background: var(--panel-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px; max-height: 320px; overflow: auto; }
+    .debug-step { padding: 10px 0; border-bottom: 1px dashed rgba(148,163,184,.18); }
+    .debug-step:last-child { border-bottom: 0; }
+    .debug-step-time { color: #93c5fd; font-size: 12px; margin-bottom: 4px; }
+    .debug-step-message { font-size: 13px; line-height: 1.5; }
+    @media (max-width: 1100px) { .debug-grid { grid-template-columns: 1fr; } }
+    .status-pill { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .status-pending { background: rgba(245,158,11,.15); color: #fcd34d; border: 1px solid rgba(245,158,11,.35); }
+    .status-inprocess { background: rgba(56,189,248,.15); color: #93c5fd; border: 1px solid rgba(56,189,248,.35); }
+    .status-success { background: rgba(34,197,94,.15); color: #86efac; border: 1px solid rgba(34,197,94,.35); }
+    @media (max-width: 1280px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div>
+        <h1>Quản lý tài khoản lấy code ChatGPT</h1>
+        <p class="subtitle">Dữ liệu được lưu vào DB trên máy tính. Tài khoản import mới mặc định là `pending`.</p>
+      </div>
+      <div class="badge">SQLite local database</div>
+    </div>
+
+    <div class="layout">
+      <section class="card">
+        <h2>Quản lý danh sách</h2>
+        <div class="field">
+          <label for="newListName">Tên danh sách</label>
+          <input id="newListName" placeholder="Ví dụ: List Hotmail 1" />
+        </div>
+        <div class="actions">
+          <button id="createListBtn" class="btn-primary" type="button">Tạo danh sách</button>
+          <button id="deleteListBtn" class="btn-danger" type="button">Xóa danh sách</button>
+        </div>
+        <p class="hint">Dữ liệu được lưu trong file `data.db` ngay trong thư mục project.</p>
+        <hr style="border-color:#334155; opacity:.5; margin:16px 0;">
+        <div class="toolbar">
+          <button id="exportBtn" class="btn-secondary" type="button">Export JSON</button>
+          <button id="reloadListsBtn" class="btn-secondary" type="button">Reload lists</button>
+          <button id="clearAllBtn" class="btn-danger" type="button">Xóa tất cả</button>
+        </div>
+        <div id="listsDebug" class="hint" style="margin-bottom:10px;">Loaded lists: 0</div>
+        <div id="listsContainer" class="list-box"></div>
+      </section>
+
+      <section class="card">
+        <h2>Import tài khoản</h2>
+        <div class="field">
+          <label for="importText">Dữ liệu import</label>
+          <textarea id="importText" placeholder="email|password|refresh_token|client_id"></textarea>
+        </div>
+        <p class="hint">Mỗi dòng 1 tài khoản. Tất cả tài khoản import vào sẽ có trạng thái `pending`.</p>
+        <div class="actions">
+          <button id="importBtn" class="btn-success" type="button">Import vào danh sách đang chọn</button>
+          <button id="runAllBtn" class="btn-primary" type="button">Run t?t c? t?i kho?n trong list</button>
+          <button id="clearImportBtn" class="btn-secondary" type="button">Xóa ô import</button>
+        </div>
+        <hr style="border-color:#334155; opacity:.5; margin:16px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+          <h3 style="margin:0;">Tài khoản trong danh sách</h3>
+          <span id="accountsCount" class="badge">0 tài khoản</span>
+        </div>
+        <div style="height:12px;"></div>
+        <div id="accountsContainer" class="list-box"></div>
+        <div style="height:14px;"></div>
+        <div class="meta-box">
+          <div class="meta-label">List Sessions Converted</div>
+          <div id="listSessions" class="json-box">[]</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Chi tiết tài khoản</h2>
+        <div id="detailHeader" class="empty">Chọn một tài khoản để xem chi tiết và lấy code.</div>
+        <div id="accountDetail" style="display:none;">
+          <div id="accountMeta" class="result-grid"></div>
+          <div class="account-actions">
+            <button id="runBtn" class="btn-success" type="button">Run OpenAI</button>
+            <button id="getCodeBtn" class="btn-primary" type="button">Get code</button>
+            <button id="copyCodeBtn" class="btn-warning" type="button">Copy code</button>
+            <button id="deleteAccountBtn" class="btn-danger" type="button">Xóa tài khoản</button>
+          </div>
+          <div style="height:16px;"></div>
+          <div class="meta-box">
+            <div class="meta-label">Saved Session</div>
+            <div id="savedSession" class="json-box">-</div>
+          </div>
+          <div class="meta-box" style="margin-top:14px;">
+            <div class="meta-label">Debug Flow</div>
+            <div class="debug-grid">
+              <div id="debugSummary" class="debug-summary"></div>
+              <div id="debugSteps" class="debug-steps"></div>
+            </div>
+          </div>
+        </div>
+        <div id="status" class="status"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      lists: [],
+      selectedListId: null,
+      selectedAccountId: null,
+      lastResult: null,
+      runStatusTimer: null
+    };
+
+    const elements = {
+      newListName: document.getElementById('newListName'),
+      createListBtn: document.getElementById('createListBtn'),
+      deleteListBtn: document.getElementById('deleteListBtn'),
+      exportBtn: document.getElementById('exportBtn'),
+      reloadListsBtn: document.getElementById('reloadListsBtn'),
+      runAllBtn: document.getElementById('runAllBtn'),
+      clearAllBtn: document.getElementById('clearAllBtn'),
+      listsDebug: document.getElementById('listsDebug'),
+      listsContainer: document.getElementById('listsContainer'),
+      importText: document.getElementById('importText'),
+      importBtn: document.getElementById('importBtn'),
+      clearImportBtn: document.getElementById('clearImportBtn'),
+      accountsContainer: document.getElementById('accountsContainer'),
+      accountsCount: document.getElementById('accountsCount'),
+      listSessions: document.getElementById('listSessions'),
+      detailHeader: document.getElementById('detailHeader'),
+      accountDetail: document.getElementById('accountDetail'),
+      accountMeta: document.getElementById('accountMeta'),
+      runBtn: document.getElementById('runBtn'),
+      getCodeBtn: document.getElementById('getCodeBtn'),
+      copyCodeBtn: document.getElementById('copyCodeBtn'),
+      deleteAccountBtn: document.getElementById('deleteAccountBtn'),
+      savedSession: document.getElementById('savedSession'),
+      debugSummary: document.getElementById('debugSummary'),
+      debugSteps: document.getElementById('debugSteps'),
+      status: document.getElementById('status')
+    };
+
+    function showStatus(type, message) {
+      elements.status.className = 'status show ' + type;
+      elements.status.textContent = message;
+    }
+
+    function clearStatus() {
+      elements.status.className = 'status';
+      elements.status.textContent = '';
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getSelectedList() {
+      return state.lists.find(item => item.id === state.selectedListId) || null;
+    }
+
+    function getSelectedAccount() {
+      const list = getSelectedList();
+      if (!list) return null;
+      return list.accounts.find(item => item.id === state.selectedAccountId) || null;
+    }
+
+    function pickDefaultListId(lists) {
+      if (!Array.isArray(lists) || lists.length === 0) return null;
+      const firstWithAccounts = lists.find(item => Array.isArray(item.accounts) && item.accounts.length > 0);
+      return firstWithAccounts?.id || lists[0]?.id || null;
+    }
+
+    function getConvertedSessionsForSelectedList() {
+      const list = getSelectedList();
+      if (!list) return [];
+      return list.accounts
+        .map(account => {
+          try {
+            return account.session_raw ? JSON.parse(account.session_raw) : null;
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+    }
+
+    function formatDate(value) {
+      if (!value) return '-';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat('vi-VN', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        day: '2-digit', month: '2-digit', year: 'numeric'
+      }).format(date);
+    }
+
+    function statusClass(status) {
+      if (status === 'success') return 'status-success';
+      if (status === 'inprocess') return 'status-inprocess';
+      return 'status-pending';
+    }
+
+    function statusLabel(status) {
+      if (status === 'success') return 'success';
+      if (status === 'inprocess') return 'inprocess';
+      return 'pending';
+    }
+
+    function formatStepLogs(steps = []) {
+      return steps.map(step => ({
+        ...step,
+        at_text: formatDate(step.at)
+      }));
+    }
+
+    function renderDebugPanel(result) {
+      const steps = Array.isArray(result?.steps) ? result.steps : [];
+      const summary = [
+        { label: 'Status', value: result?.running ? 'Running' : (result?.error ? 'Error' : (result?.message ? 'Success' : 'Idle')) },
+        { label: 'Steps', value: String(steps.length) },
+        { label: 'Message', value: result?.message || result?.error || '-' },
+        { label: 'URL', value: result?.url || '-' }
+      ];
+
+      elements.debugSummary.innerHTML = summary.map(item => `
+        <div class="debug-card">
+          <div class="debug-title">${escapeHtml(item.label)}</div>
+          <div class="debug-value">${escapeHtml(item.value)}</div>
+        </div>
+      `).join('');
+
+      if (steps.length === 0) {
+        elements.debugSteps.innerHTML = '<div class="empty">Ch?a c? step debug cho t?i kho?n n?y.</div>';
+        return;
+      }
+
+      elements.debugSteps.innerHTML = steps.map(step => `
+        <div class="debug-step">
+          <div class="debug-step-time">${escapeHtml(step.at_text || formatDate(step.at) || '-')}</div>
+          <div class="debug-step-message">${escapeHtml(step.message || '-')}</div>
+        </div>
+      `).join('');
+    }
+
+    async function pollRunStatus(accountId) {
+      if (state.runStatusTimer) clearInterval(state.runStatusTimer);
+      state.runStatusTimer = setInterval(async () => {
+        try {
+          const data = await api(`/api/accounts/${accountId}/run-status`);
+          if (!data) return;
+          state.lastResult = {
+            ...(state.lastResult || {}),
+            message: data.message || state.lastResult?.message || '',
+            error: data.error || '',
+            steps: formatStepLogs(data.steps || []),
+            running: Boolean(data.running)
+          };
+          renderAccountDetail();
+          if (!data.running) {
+            clearInterval(state.runStatusTimer);
+            state.runStatusTimer = null;
+          }
+        } catch {}
+      }, 1000);
+    }
+
+    function stopRunStatusPolling() {
+      if (state.runStatusTimer) {
+        clearInterval(state.runStatusTimer);
+        state.runStatusTimer = null;
+      }
+    }
+    async function fetchListsRaw() {
+      const response = await fetch('/api/lists', { cache: 'no-store' });
+      const text = await response.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error('Kh?ng parse ???c d? li?u danh s?ch.');
+      }
+      if (!response.ok) throw new Error(data.error || `Request th?t b?i. HTTP ${response.status}`);
+      return Array.isArray(data.lists) ? data.lists : [];
+    }
+
+    async function bootstrapListsOnly() {
+      const lists = await fetchListsRaw();
+      state.lists = lists;
+      if (!state.lists.some(item => item.id === state.selectedListId)) {
+        state.selectedListId = pickDefaultListId(state.lists);
+      }
+      const selectedList = getSelectedList();
+      if (!selectedList?.accounts.some(item => item.id === state.selectedAccountId)) {
+        state.selectedAccountId = selectedList?.accounts[0]?.id || null;
+      }
+      elements.listsDebug.textContent = `Loaded lists: ${state.lists.length}`;
+      renderLists();
+    }
+
+    async function api(url, options = {}) {
+      const response = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      const text = await response.text();
+      let data = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error('Phản hồi server không hợp lệ.');
+      }
+      if (!response.ok) {
+        if (data.lists) {
+          state.lists = data.lists;
+        }
+        const error = new Error(data.error || `Request th?t b?i. HTTP ${response.status}`);
+        error.payload = data;
+        throw error;
+      }
+      return data;
+    }
+
+    async function loadLists() {
+      if (!state.lists.some(item => item.id === state.selectedListId)) {
+        state.selectedListId = pickDefaultListId(state.lists);
+      }
+      const selectedList = getSelectedList();
+      if (!selectedList && state.lists.length > 0) {
+        state.selectedListId = pickDefaultListId(state.lists);
+      }
+      const resolvedList = getSelectedList();
+      if (!resolvedList?.accounts.some(item => item.id === state.selectedAccountId)) {
+        state.selectedAccountId = resolvedList?.accounts[0]?.id || null;
+      }
+
+      renderLists();
+
+      try {
+        renderAccounts();
+        renderAccountDetail();
+      } catch (error) {
+        renderLists();
+        showStatus('error', error.message || 'Render UI th?t b?i.');
+      }
+    }
+
+
+    function parseImportText(input) {
+      return input
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+          const parts = line.split('|');
+          if (parts.length < 4) return null;
+          return {
+            email: parts[0].trim(),
+            password: parts[1].trim(),
+            refresh_token: parts[2].trim(),
+            client_id: parts[3].trim()
+          };
+        })
+        .filter(Boolean);
+    }
+
+    async function createList() {
+      const name = elements.newListName.value.trim();
+      if (!name) return showStatus('error', 'Bạn chưa nhập tên danh sách.');
+      const data = await api('/api/lists', { method: 'POST', body: JSON.stringify({ name }) });
+      state.lists = data.lists || [];
+      state.selectedListId = Number(data.id);
+      state.selectedAccountId = null;
+      elements.newListName.value = '';
+      render();
+      showStatus('success', 'Đã tạo danh sách mới.');
+    }
+
+    async function deleteSelectedList() {
+      const list = getSelectedList();
+      if (!list) return showStatus('error', 'Chưa có danh sách nào được chọn.');
+      if (!confirm(`Xóa danh sách "${list.name}"?`)) return;
+      const data = await api(`/api/lists/${list.id}`, { method: 'DELETE' });
+      state.lists = data.lists || [];
+      state.selectedListId = state.lists[0]?.id || null;
+      state.selectedAccountId = getSelectedList()?.accounts[0]?.id || null;
+      state.lastResult = null;
+      render();
+      showStatus('success', 'Đã xóa danh sách.');
+    }
+
+    async function clearAll() {
+      if (!confirm('Xóa toàn bộ dữ liệu trong DB?')) return;
+      const data = await api('/api/data', { method: 'DELETE' });
+      state.lists = data.lists || [];
+      state.selectedListId = null;
+      state.selectedAccountId = null;
+      state.lastResult = null;
+      render();
+      showStatus('success', 'Đã xóa toàn bộ dữ liệu.');
+    }
+
+    async function importAccounts() {
+      const list = getSelectedList();
+      if (!list) return showStatus('error', 'Hãy tạo hoặc chọn một danh sách trước.');
+      const rows = parseImportText(elements.importText.value.trim());
+      if (rows.length === 0) return showStatus('error', 'Không đọc được dữ liệu import hợp lệ.');
+      const data = await api(`/api/lists/${list.id}/import`, { method: 'POST', body: JSON.stringify({ rows }) });
+      state.lists = data.lists || [];
+      state.selectedListId = list.id;
+      state.selectedAccountId = getSelectedList()?.accounts[0]?.id || null;
+      elements.importText.value = '';
+      render();
+      showStatus('success', `Đã import ${rows.length} tài khoản. Tất cả được đặt trạng thái pending.`);
+    }
+
+    async function deleteSelectedAccount() {
+      const account = getSelectedAccount();
+      if (!account) return showStatus('error', 'Chưa chọn tài khoản.');
+      if (!confirm(`Xóa tài khoản ${account.email}?`)) return;
+      const data = await api(`/api/accounts/${account.id}`, { method: 'DELETE' });
+      state.lists = data.lists || [];
+      state.selectedAccountId = getSelectedList()?.accounts[0]?.id || null;
+      state.lastResult = null;
+      render();
+      showStatus('success', 'Đã xóa tài khoản.');
+    }
+
+    async function fetchLatestCode() {
+      const account = getSelectedAccount();
+      if (!account) return showStatus('error', 'Chưa chọn tài khoản.');
+      showStatus('info', `Đang lấy code cho ${account.email} ...`);
+      account.status = 'inprocess';
+      renderAccountDetail();
+      renderAccounts();
+
+      try {
+        const data = await api(`/api/accounts/${account.id}/get-code`, { method: 'POST' });
+        state.lists = data.lists || [];
+        state.lastResult = data.raw || null;
+        render();
+        showStatus('success', `Đã lấy code mới nhất cho ${account.email}`);
+      } catch (error) {
+        state.lastResult = null;
+        await loadLists();
+        showStatus('error', error.message || 'Lấy code thất bại.');
+      }
+    }
+
+    async function runAllAccountsInList() {
+      const list = getSelectedList();
+      if (!list) return showStatus('error', 'Ch?a ch?n list.');
+      if (!list.accounts.length) return showStatus('error', 'List n?y ch?a c? t?i kho?n.');
+
+      stopRunStatusPolling();
+      const accounts = [...list.accounts];
+      let completed = 0;
+      let successCount = 0;
+      const total = accounts.length;
+
+      for (const account of accounts) {
+        state.selectedListId = list.id;
+        state.selectedAccountId = account.id;
+        state.lastResult = { message: '', error: '', steps: [], running: true, url: '' };
+        render();
+        showStatus('info', `?ang ch?y ${completed + 1}/${total}: ${account.email}`);
+        await pollRunStatus(account.id);
+
+        try {
+          const data = await api(`/api/accounts/${account.id}/run`, { method: 'POST' });
+          stopRunStatusPolling();
+          state.lastResult = {
+            message: data.message || '',
+            steps: formatStepLogs(data.steps || []),
+            url: data.url || '',
+            running: false
+          };
+          successCount += 1;
+        } catch (error) {
+          stopRunStatusPolling();
+          state.lastResult = {
+            error: error.message || 'Kh?ng m? ???c browser.',
+            steps: formatStepLogs(error.payload?.steps || state.lastResult?.steps || []),
+            running: false
+          };
+        }
+
+
+        completed += 1;
+        await loadLists();
+        state.selectedListId = list.id;
+        state.selectedAccountId = account.id;
+        render();
+        elements.listSessions.textContent = JSON.stringify(getConvertedSessionsForSelectedList(), null, 2);
+      }
+
+      showStatus('success', `?? ch?y xong ${completed}/${total} t?i kho?n trong list.`);
+    }
+
+    async function runAccount() {
+      const account = getSelectedAccount();
+      if (!account) return showStatus('error', 'Ch?a ch?n t?i kho?n.');
+      stopRunStatusPolling();
+      state.lastResult = { message: '', error: '', steps: [], running: true, url: '' };
+      renderAccountDetail();
+      showStatus('info', `Dang chay flow OpenAI va se tu nhap email ${account.email} ...`);
+      await pollRunStatus(account.id);
+      try {
+        const data = await api(`/api/accounts/${account.id}/run`, { method: 'POST' });
+        stopRunStatusPolling();
+        state.lastResult = {
+          message: data.message || '',
+          steps: formatStepLogs(data.steps || []),
+          url: data.url || '',
+          running: false
+        };
+        await loadLists();
+        state.selectedAccountId = data.account?.id || account.id;
+        renderAccountDetail();
+        showStatus('success', data.message || 'Da chay flow OpenAI va nhap email vao form signup.');
+      } catch (error) {
+        stopRunStatusPolling();
+        state.lastResult = {
+          error: error.message || 'Kh?ng m? ???c browser.',
+          steps: formatStepLogs(error.payload?.steps || state.lastResult?.steps || []),
+          running: false
+        };
+        render();
+        showStatus('error', error.message || 'Kh?ng m? ???c browser.');
+      }
+    }
+
+    async function copyCode() {
+      const code = getSelectedAccount()?.last_code || '';
+      if (!code) return showStatus('error', 'Chưa có code để copy.');
+      try {
+        await navigator.clipboard.writeText(code);
+        showStatus('success', `Đã copy code ${code}`);
+      } catch {
+        showStatus('error', 'Copy code thất bại.');
+      }
+    }
+
+    function exportData() {
+      const blob = new Blob([JSON.stringify(state.lists, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'account-lists.json';
+      link.click();
+      URL.revokeObjectURL(url);
+      showStatus('success', 'Đã export dữ liệu JSON.');
+    }
+
+    function renderLists() {
+      if (state.lists.length === 0) {
+        elements.listsContainer.innerHTML = '<div class="empty">Chưa có danh sách nào.</div>';
+        return;
+      }
+      elements.listsContainer.innerHTML = state.lists.map(list => `
+        <div class="list-item ${list.id === state.selectedListId ? 'active' : ''}" data-list-id="${list.id}">
+          <div class="list-name">${escapeHtml(list.name)}</div>
+          <div class="meta">${list.accounts.length} tài khoản</div>
+        </div>
+      `).join('');
+      elements.listsContainer.querySelectorAll('[data-list-id]').forEach(node => {
+        node.addEventListener('click', () => {
+          state.selectedListId = Number(node.getAttribute('data-list-id'));
+          state.selectedAccountId = getSelectedList()?.accounts[0]?.id || null;
+          state.lastResult = null;
+          render();
+        });
+      });
+    }
+
+    function renderAccounts() {
+      const list = getSelectedList();
+      const count = list?.accounts.length || 0;
+      elements.accountsCount.textContent = `${count} tài khoản`;
+      if (!list) {
+        elements.accountsContainer.innerHTML = '<div class="empty">Chọn hoặc tạo danh sách trước.</div>';
+        return;
+      }
+      if (count === 0) {
+        elements.accountsContainer.innerHTML = '<div class="empty">Danh sách này chưa có tài khoản.</div>';
+        return;
+      }
+      elements.accountsContainer.innerHTML = list.accounts.map(account => `
+        <div class="account-item ${account.id === state.selectedAccountId ? 'active' : ''}" data-account-id="${account.id}">
+          <div class="account-email">${escapeHtml(account.email)}</div>
+          <div class="meta">Pass: ${escapeHtml(account.password || '-')}</div>
+          <div class="meta">Trạng thái: <span class="status-pill ${statusClass(account.status)}">${statusLabel(account.status)}</span></div>
+          <div class="meta">Code gần nhất: ${escapeHtml(account.last_code || '-')}</div>
+          <div class="meta">Lần cập nhật: ${escapeHtml(account.last_fetched_at ? formatDate(account.last_fetched_at) : '-')}</div>
+        </div>
+      `).join('');
+      elements.accountsContainer.querySelectorAll('[data-account-id]').forEach(node => {
+        node.addEventListener('click', () => {
+          state.selectedAccountId = Number(node.getAttribute('data-account-id'));
+          renderAccounts();
+          renderAccountDetail();
+        });
+      });
+    }
+
+    function renderAccountDetail() {
+      const account = getSelectedAccount();
+      if (!account) {
+        elements.detailHeader.style.display = 'block';
+        elements.accountDetail.style.display = 'none';
+        elements.detailHeader.textContent = 'Chọn một tài khoản để xem chi tiết và lấy code.';
+        return;
+      }
+      elements.detailHeader.style.display = 'none';
+      elements.accountDetail.style.display = 'block';
+      elements.accountMeta.innerHTML = [
+        { label: 'Email', value: account.email },
+        { label: 'Password', value: account.password || '-' },
+        { label: 'Client ID', value: account.client_id || '-' },
+        { label: 'Status', value: statusLabel(account.status) },
+        { label: 'Refresh Token', value: account.refresh_token || '-' },
+        { label: 'Last Fetched', value: account.last_fetched_at ? formatDate(account.last_fetched_at) : '-' },
+        { label: 'Session Saved', value: account.session_fetched_at ? formatDate(account.session_fetched_at) : '-' }
+      ].map(item => `
+        <div class="meta-box">
+          <div class="meta-label">${escapeHtml(item.label)}</div>
+          <div class="meta-value">${escapeHtml(item.value)}</div>
+        </div>
+      `).join('');
+      elements.savedSession.textContent = account.session_raw || '-';
+      renderDebugPanel(state.lastResult);
+    }
+
+    function render() {
+      renderLists();
+      renderAccounts();
+      renderAccountDetail();
+    }
+
+    function bindClick(element, handler) {
+      if (!element) return;
+      element.addEventListener('click', handler);
+    }
+
+    bindClick(elements.createListBtn, () => createList().catch(err => showStatus('error', err.message)));
+    bindClick(elements.deleteListBtn, () => deleteSelectedList().catch(err => showStatus('error', err.message)));
+    bindClick(elements.importBtn, () => importAccounts().catch(err => showStatus('error', err.message)));
+    bindClick(elements.clearImportBtn, () => { elements.importText.value = ''; });
+    bindClick(elements.clearAllBtn, () => clearAll().catch(err => showStatus('error', err.message)));
+    async function hardReloadLists(options = {}) {
+      const attempts = options.attempts || 6;
+      const delayMs = options.delayMs || 500;
+      let lastError = null;
+
+      for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+          await bootstrapListsOnly();
+          await loadLists();
+          elements.listsDebug.textContent = 'Loaded lists: ' + state.lists.length + ' | Attempt: ' + attempt + '/' + attempts;
+          if (state.lists.length > 0 || attempt === attempts) return;
+        } catch (error) {
+          lastError = error;
+          elements.listsDebug.textContent = 'Loaded lists: 0 | Attempt: ' + attempt + '/' + attempts;
+        }
+
+        if (attempt < attempts) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      }
+
+      if (lastError) throw lastError;
+    }
+
+    bindClick(elements.exportBtn, exportData);
+    bindClick(elements.reloadListsBtn, () => hardReloadLists().catch(err => showStatus('error', err.message)));
+    bindClick(elements.runAllBtn, () => runAllAccountsInList().catch(err => showStatus('error', err.message)));
+    bindClick(elements.runBtn, () => runAccount().catch(err => showStatus('error', err.message)));
+    bindClick(elements.getCodeBtn, () => fetchLatestCode().catch(err => showStatus('error', err.message)));
+    bindClick(elements.copyCodeBtn, copyCode);
+    bindClick(elements.deleteAccountBtn, () => deleteSelectedAccount().catch(err => showStatus('error', err.message)));
+
+    window.state = state;
+
+    window.addEventListener('load', () => {
+      hardReloadLists({ attempts: 6, delayMs: 500 }).catch(err => {
+        showStatus('error', err.message || 'Kh?ng t?i ???c d? li?u t? DB.');
+      });
+    }, { once: true });
+  </script>
+</body>
+</html>
+
+
