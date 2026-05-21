@@ -58,6 +58,14 @@
     .code-box { background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.35); color: #bbf7d0; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
     .code-value { font-size: 34px; font-weight: 800; letter-spacing: 2px; margin-top: 6px; }
     .message-box, .json-box { background: var(--panel-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; font-size: 13px; line-height: 1.5; }
+    .panel-stack { display: grid; gap: 14px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .panel-head .meta-label { margin-bottom: 0; font-size: 13px; }
+    .panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .panel-actions button { padding: 8px 12px; border-radius: 9px; font-size: 12px; }
+    .json-box.tall { max-height: 360px; min-height: 220px; }
+    .section-note { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 8px; }
+    .section-note .hint { margin: 0; }
     .debug-grid { display: grid; grid-template-columns: 260px 1fr; gap: 12px; margin-top: 14px; }
     .debug-summary { display: grid; gap: 10px; }
     .debug-card { background: var(--panel-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
@@ -117,7 +125,7 @@
         <p class="hint">Mỗi dòng 1 tài khoản. Tất cả tài khoản import vào sẽ có trạng thái `pending`.</p>
         <div class="actions">
           <button id="importBtn" class="btn-success" type="button">Import vào danh sách đang chọn</button>
-          <button id="runAllBtn" class="btn-primary" type="button">Run t?t c? t?i kho?n trong list</button>
+          <button id="runAllBtn" class="btn-primary" type="button">Run tat ca tai khoan trong list</button>
           <button id="clearImportBtn" class="btn-secondary" type="button">Xóa ô import</button>
         </div>
         <hr style="border-color:#334155; opacity:.5; margin:16px 0;">
@@ -128,9 +136,19 @@
         <div style="height:12px;"></div>
         <div id="accountsContainer" class="list-box"></div>
         <div style="height:14px;"></div>
-        <div class="meta-box">
-          <div class="meta-label">List Sessions Converted</div>
-          <div id="listSessions" class="json-box">[]</div>
+        <div class="meta-box panel-stack">
+          <div class="panel-head">
+            <div class="meta-label">Saved Session List</div>
+            <div class="panel-actions">
+              <button id="copyListSessionsBtn" class="btn-secondary" type="button">Copy Sessions</button>
+              <button id="exportListSessionsBtn" class="btn-primary" type="button">Export Sessions JSON</button>
+            </div>
+          </div>
+          <div id="listSessions" class="json-box tall">[]</div>
+          <div class="section-note">
+            <p class="hint">Tu tong hop session cua toan bo account da hoan thanh trong list dang chon.</p>
+            <span id="listSessionsCount" class="badge">0 sessions</span>
+          </div>
         </div>
       </section>
 
@@ -188,6 +206,9 @@
       accountsContainer: document.getElementById('accountsContainer'),
       accountsCount: document.getElementById('accountsCount'),
       listSessions: document.getElementById('listSessions'),
+      listSessionsCount: document.getElementById('listSessionsCount'),
+      copyListSessionsBtn: document.getElementById('copyListSessionsBtn'),
+      exportListSessionsBtn: document.getElementById('exportListSessionsBtn'),
       detailHeader: document.getElementById('detailHeader'),
       accountDetail: document.getElementById('accountDetail'),
       accountMeta: document.getElementById('accountMeta'),
@@ -239,10 +260,21 @@
     function getConvertedSessionsForSelectedList() {
       const list = getSelectedList();
       if (!list) return [];
+
       return list.accounts
-        .map(account => {
+        .map((account, index) => {
           try {
-            return account.session_raw ? JSON.parse(account.session_raw) : null;
+            const parsed = account.session_raw ? JSON.parse(account.session_raw) : null;
+            if (!parsed || typeof parsed !== 'object') return null;
+            if (!parsed.email && !parsed.id && !parsed.accessToken && !parsed.refreshToken) return null;
+
+            return {
+              ...parsed,
+              name: parsed.name || account.email,
+              email: parsed.email || account.email,
+              priority: index + 1,
+              updatedAt: parsed.updatedAt || parsed.createdAt || new Date().toISOString()
+            };
           } catch {
             return null;
           }
@@ -544,7 +576,7 @@
         } catch (error) {
           stopRunStatusPolling();
           state.lastResult = {
-            error: error.message || 'Kh?ng m? ???c browser.',
+            error: error.message || 'Khong mo duoc browser.',
             steps: formatStepLogs(error.payload?.steps || state.lastResult?.steps || []),
             running: false
           };
@@ -559,12 +591,12 @@
         elements.listSessions.textContent = JSON.stringify(getConvertedSessionsForSelectedList(), null, 2);
       }
 
-      showStatus('success', `?? ch?y xong ${completed}/${total} t?i kho?n trong list.`);
+      showStatus('success', `Da chay xong ${completed}/${total} t?i kho?n trong list.`);
     }
 
     async function runAccount() {
       const account = getSelectedAccount();
-      if (!account) return showStatus('error', 'Ch?a ch?n t?i kho?n.');
+      if (!account) return showStatus('error', 'Chua chon tai khoan.');
       stopRunStatusPolling();
       state.lastResult = { message: '', error: '', steps: [], running: true, url: '' };
       renderAccountDetail();
@@ -586,12 +618,12 @@
       } catch (error) {
         stopRunStatusPolling();
         state.lastResult = {
-          error: error.message || 'Kh?ng m? ???c browser.',
+          error: error.message || 'Khong mo duoc browser.',
           steps: formatStepLogs(error.payload?.steps || state.lastResult?.steps || []),
           running: false
         };
         render();
-        showStatus('error', error.message || 'Kh?ng m? ???c browser.');
+        showStatus('error', error.message || 'Khong mo duoc browser.');
       }
     }
 
@@ -696,10 +728,40 @@
       renderDebugPanel(state.lastResult);
     }
 
+    function renderSavedSessionsPanel() {
+      const sessions = getConvertedSessionsForSelectedList();
+      elements.listSessions.textContent = JSON.stringify(sessions, null, 2);
+      if (elements.listSessionsCount) {
+        elements.listSessionsCount.textContent = sessions.length + ' sessions';
+      }
+    }
+
+    async function copyListSessions() {
+      const sessions = getConvertedSessionsForSelectedList();
+      await navigator.clipboard.writeText(JSON.stringify(sessions, null, 2));
+      showStatus('success', 'Da copy Saved Session List.');
+    }
+
+    function exportListSessions() {
+      const list = getSelectedList();
+      if (!list) return showStatus('error', 'Chua chon danh sach de export session.');
+      const sessions = getConvertedSessionsForSelectedList();
+      const blob = new Blob([JSON.stringify(sessions, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const safeName = (list.name || 'session-list').replace(/[^a-z0-9-_]+/gi, '-');
+      link.href = url;
+      link.download = safeName + '-sessions.json';
+      link.click();
+      URL.revokeObjectURL(url);
+      showStatus('success', 'Da export Saved Session List JSON.');
+    }
+
     function render() {
       renderLists();
       renderAccounts();
       renderAccountDetail();
+      renderSavedSessionsPanel();
     }
 
     function bindClick(element, handler) {
@@ -743,12 +805,14 @@
     bindClick(elements.getCodeBtn, () => fetchLatestCode().catch(err => showStatus('error', err.message)));
     bindClick(elements.copyCodeBtn, copyCode);
     bindClick(elements.deleteAccountBtn, () => deleteSelectedAccount().catch(err => showStatus('error', err.message)));
+    bindClick(elements.copyListSessionsBtn, () => copyListSessions().catch(err => showStatus('error', err.message)));
+    bindClick(elements.exportListSessionsBtn, exportListSessions);
 
     window.state = state;
 
     window.addEventListener('load', () => {
       hardReloadLists({ attempts: 6, delayMs: 500 }).catch(err => {
-        showStatus('error', err.message || 'Kh?ng t?i ???c d? li?u t? DB.');
+        showStatus('error', err.message || 'Khong tai duoc du lieu tu DB.');
       });
     }, { once: true });
   </script>

@@ -602,7 +602,7 @@ function normalizeSessionPayload(sessionRaw) {
     authType: 'oauth',
     name: email || parsed?.user?.name || '',
     email,
-    priority: 1,
+    priority: 0,
     isActive: true,
     createdAt,
     updatedAt: createdAt
@@ -619,6 +619,22 @@ function listConvertedSessions(list) {
       }
     })
     .filter(Boolean);
+}
+
+async function waitForAccountReadyBeforeSession(page, stepLog) {
+  const waitMs = 30000;
+
+  if (stepLog) {
+    stepLog.push('Da bam Finish creating account. Dang doi dung 30 giay truoc khi mo trang session.');
+  }
+
+  await sleep(waitMs);
+
+  if (stepLog) {
+    stepLog.push('Da doi du 30 giay sau khi bam Finish. Bat dau mo trang session.');
+  }
+
+  return { waitedMs: waitMs };
 }
 
 async function captureSessionPayload(page) {
@@ -921,9 +937,8 @@ app.post('/api/accounts/:id/run', async (req, res) => {
     await prepareVisibleLocator(finishCreateAccountButton);
     await humanPause(900, 250);
     await stableClick(finishCreateAccountButton);
-    stepLog.push('Da bam Finish creating account.');
-    stepLog.push('Dang cho 10 giay de account hoan tat dang ky truoc khi lay session.');
-    await humanPause(10000, 500);
+    await waitForAccountReadyBeforeSession(targetPage, stepLog);
+
 
     const sessionCapture = await captureSessionPayload(targetPage);
     const accountWithSession = saveSessionSnapshot(id, sessionCapture.payloadText);
