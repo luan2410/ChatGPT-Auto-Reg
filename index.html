@@ -32,7 +32,10 @@
     .field label { display: block; font-size: 13px; color: #cbd5e1; margin-bottom: 6px; }
     .field input, .field textarea { width: 100%; border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); padding: 11px 13px; outline: none; }
     .field textarea { resize: vertical; min-height: 120px; font-family: Consolas, monospace; font-size: 12px; }
-    .actions, .toolbar, .account-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    .actions, .toolbar, .account-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+    .field-inline { display: flex; flex-direction: column; gap: 6px; min-width: 120px; }
+    .field-inline label { font-size: 12px; color: #cbd5e1; }
+    .field-inline select { border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); padding: 10px 12px; outline: none; }
     button { border: 0; border-radius: 10px; padding: 10px 14px; cursor: pointer; font-weight: 700; }
     .btn-primary { background: var(--primary); color: #082f49; }
     .btn-secondary { background: #334155; color: white; }
@@ -72,6 +75,18 @@
     .debug-title { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
     .debug-value { font-size: 14px; font-weight: 700; word-break: break-word; }
     .debug-steps { background: var(--panel-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px; max-height: 320px; overflow: auto; }
+    .process-board { display: grid; gap: 12px; }
+    .process-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .process-card { background: var(--panel-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+    .process-label { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .process-value { font-size: 16px; font-weight: 700; word-break: break-word; }
+    .process-log { background: var(--panel-3); border: 1px solid var(--border); border-radius: 12px; padding: 12px; max-height: 240px; overflow: auto; }
+    .process-item { padding: 8px 0; border-bottom: 1px dashed rgba(148,163,184,.18); }
+    .process-item:last-child { border-bottom: 0; }
+    .process-item-time { color: #93c5fd; font-size: 12px; margin-bottom: 4px; }
+    .process-item-text { font-size: 13px; line-height: 1.45; }
+    @media (max-width: 1100px) { .process-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 720px) { .process-grid { grid-template-columns: 1fr; } }
     .debug-step { padding: 10px 0; border-bottom: 1px dashed rgba(148,163,184,.18); }
     .debug-step:last-child { border-bottom: 0; }
     .debug-step-time { color: #93c5fd; font-size: 12px; margin-bottom: 4px; }
@@ -124,9 +139,20 @@
         </div>
         <p class="hint">Mỗi dòng 1 tài khoản. Tất cả tài khoản import vào sẽ có trạng thái `pending`.</p>
         <div class="actions">
-          <button id="importBtn" class="btn-success" type="button">Import vào danh sách đang chọn</button>
-          <button id="runAllBtn" class="btn-primary" type="button">Run tat ca tai khoan trong list</button>
-          <button id="clearImportBtn" class="btn-secondary" type="button">Xóa ô import</button>
+          <button id="importBtn" class="btn-success" type="button">Import vao danh sach dang chon</button>
+          <div class="field-inline">
+            <label for="runAllWorkers">Workers</label>
+            <select id="runAllWorkers">
+              <option value="1">1 worker</option>
+              <option value="2">2 workers</option>
+              <option value="3">3 workers</option>
+              <option value="4">4 workers</option>
+              <option value="5">5 workers</option>
+            </select>
+          </div>
+          <button id="runAllBtn" class="btn-primary" type="button">Run tat ca tai khoan pending</button>
+          <button id="stopRunAllBtn" class="btn-danger" type="button">Dung Run All</button>
+          <button id="clearImportBtn" class="btn-secondary" type="button">Xoa o import</button>
         </div>
         <hr style="border-color:#334155; opacity:.5; margin:16px 0;">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
@@ -176,6 +202,14 @@
             </div>
           </div>
         </div>
+        <div class="meta-box" style="margin-top:14px;">
+            <div class="meta-label">Realtime Process</div>
+            <div class="process-board">
+              <div id="processSummary" class="process-grid"></div>
+              <div id="processWorkers" class="process-log"></div>
+            </div>
+          </div>
+        </div>
         <div id="status" class="status"></div>
       </section>
     </div>
@@ -187,7 +221,11 @@
       selectedListId: null,
       selectedAccountId: null,
       lastResult: null,
-      runStatusTimer: null
+      runStatusTimer: null,
+      runAllStopRequested: false,
+      activeWorkers: {},
+      processStats: { running: false, total: 0, completed: 0, success: 0, fail: 0, skip: 0, workers: 0 },
+      processLogs: []
     };
 
     const elements = {
@@ -197,6 +235,8 @@
       exportBtn: document.getElementById('exportBtn'),
       reloadListsBtn: document.getElementById('reloadListsBtn'),
       runAllBtn: document.getElementById('runAllBtn'),
+      stopRunAllBtn: document.getElementById('stopRunAllBtn'),
+      runAllWorkers: document.getElementById('runAllWorkers'),
       clearAllBtn: document.getElementById('clearAllBtn'),
       listsDebug: document.getElementById('listsDebug'),
       listsContainer: document.getElementById('listsContainer'),
@@ -219,6 +259,8 @@
       savedSession: document.getElementById('savedSession'),
       debugSummary: document.getElementById('debugSummary'),
       debugSteps: document.getElementById('debugSteps'),
+      processSummary: document.getElementById('processSummary'),
+      processWorkers: document.getElementById('processWorkers'),
       status: document.getElementById('status')
     };
 
@@ -546,52 +588,100 @@
 
     async function runAllAccountsInList() {
       const list = getSelectedList();
-      if (!list) return showStatus('error', 'Ch?a ch?n list.');
-      if (!list.accounts.length) return showStatus('error', 'List n?y ch?a c? t?i kho?n.');
+      if (!list) return showStatus('error', 'Chua chon list.');
+      if (!list.accounts.length) return showStatus('error', 'List nay chua co tai khoan.');
+
+      const pendingAccounts = list.accounts.filter(account => String(account.status || 'pending').toLowerCase() === 'pending');
+      if (!pendingAccounts.length) {
+        return showStatus('info', 'Khong co tai khoan pending nao trong list nay.');
+      }
+
+      const requestedWorkers = Number(elements.runAllWorkers?.value || 1);
+      const workerCount = Math.max(1, Math.min(5, requestedWorkers, pendingAccounts.length));
 
       stopRunStatusPolling();
-      const accounts = [...list.accounts];
+      state.runAllStopRequested = false;
+      state.activeWorkers = {};
       let completed = 0;
       let successCount = 0;
-      const total = accounts.length;
+      let failedCount = 0;
+      let skippedCount = 0;
+      let nextIndex = 0;
+      const total = pendingAccounts.length;
+      state.processStats = { running: true, total, completed: 0, success: 0, fail: 0, skip: 0, workers: workerCount };
+      pushProcessLog('Bat dau Run All voi ' + workerCount + ' worker va ' + total + ' tai khoan pending.');
 
-      for (const account of accounts) {
+      const runOneAccount = async (account, workerNo) => {
+        const claim = await api('/api/accounts/' + account.id + '/claim-run', { method: 'POST' });
+        state.lists = claim.lists || state.lists;
+        state.activeWorkers[account.id] = workerNo;
         state.selectedListId = list.id;
         state.selectedAccountId = account.id;
         state.lastResult = { message: '', error: '', steps: [], running: true, url: '' };
         render();
-        showStatus('info', `?ang ch?y ${completed + 1}/${total}: ${account.email}`);
-        await pollRunStatus(account.id);
+        showStatus('info', 'Worker ' + workerNo + ': dang chay ' + account.email + ' | tien do ' + completed + '/' + total);
 
         try {
-          const data = await api(`/api/accounts/${account.id}/run`, { method: 'POST' });
-          stopRunStatusPolling();
-          state.lastResult = {
-            message: data.message || '',
-            steps: formatStepLogs(data.steps || []),
-            url: data.url || '',
-            running: false
-          };
+          const data = await api('/api/accounts/' + account.id + '/run', { method: 'POST' });
           successCount += 1;
+          if (state.selectedAccountId === account.id) {
+            state.lastResult = {
+              message: data.message || '',
+              steps: formatStepLogs(data.steps || []),
+              url: data.url || '',
+              running: false
+            };
+          }
         } catch (error) {
-          stopRunStatusPolling();
-          state.lastResult = {
-            error: error.message || 'Khong mo duoc browser.',
-            steps: formatStepLogs(error.payload?.steps || state.lastResult?.steps || []),
-            running: false
-          };
+          failedCount += 1;
+          if (state.selectedAccountId === account.id) {
+            state.lastResult = {
+              error: error.message || 'Khong mo duoc browser.',
+              steps: formatStepLogs(error.payload?.steps || state.lastResult?.steps || []),
+              running: false
+            };
+          }
+        } finally {
+          delete state.activeWorkers[account.id];
+          completed += 1;
+          await loadLists();
+          state.selectedListId = list.id;
+          render();
+          showStatus('info', 'Tien do run all: ' + completed + '/' + total + ' | success: ' + successCount + ' | fail: ' + failedCount + ' | skip: ' + skippedCount + ' | workers: ' + workerCount);
         }
+      };
 
+      const workerLoop = async (workerNo) => {
+        while (true) {
+          if (state.runAllStopRequested) break;
+          const currentIndex = nextIndex;
+          if (currentIndex >= pendingAccounts.length) break;
+          nextIndex += 1;
+          const account = pendingAccounts[currentIndex];
 
-        completed += 1;
-        await loadLists();
-        state.selectedListId = list.id;
-        state.selectedAccountId = account.id;
-        render();
-        elements.listSessions.textContent = JSON.stringify(getConvertedSessionsForSelectedList(), null, 2);
-      }
+          try {
+            await runOneAccount(account, workerNo);
+          } catch (error) {
+            const message = String(error.message || '');
+            if (message.includes('Tai khoan khong con o trang thai pending') || message.includes('Tai khoan da duoc worker khac nhan')) {
+              skippedCount += 1;
+              await loadLists();
+              render();
+              continue;
+            }
+            failedCount += 1;
+          }
+        }
+      };
 
-      showStatus('success', `Da chay xong ${completed}/${total} t?i kho?n trong list.`);
+      await Promise.all(Array.from({ length: workerCount }, (_, index) => workerLoop(index + 1)));
+
+      await loadLists();
+      render();
+      const stoppedNote = state.runAllStopRequested ? ' | da dung nhan them account moi' : '';
+      state.runAllStopRequested = false;
+      state.activeWorkers = {};
+      showStatus('success', 'Da chay xong ' + completed + '/' + total + ' tai khoan pending | success: ' + successCount + ' | fail: ' + failedCount + ' | skip: ' + skippedCount + ' | workers: ' + workerCount + stoppedNote);
     }
 
     async function runAccount() {
@@ -670,6 +760,35 @@
       });
     }
 
+    function pushProcessLog(message) {
+      state.processLogs.unshift({ at: new Date().toISOString(), message });
+      state.processLogs = state.processLogs.slice(0, 40);
+    }
+
+    function renderProcessPanel() {
+      const stats = state.processStats || {};
+      const workerEntries = Object.entries(state.activeWorkers || {});
+      elements.processSummary.innerHTML = [
+        { label: 'Running', value: stats.running ? 'Yes' : 'No' },
+        { label: 'Workers', value: String(stats.workers || 0) },
+        { label: 'Progress', value: (stats.completed || 0) + '/' + (stats.total || 0) },
+        { label: 'Result', value: 'OK ' + (stats.success || 0) + ' | Fail ' + (stats.fail || 0) + ' | Skip ' + (stats.skip || 0) }
+      ].map(item => '\n        <div class="process-card">\n          <div class="process-label">' + escapeHtml(item.label) + '</div>\n          <div class="process-value">' + escapeHtml(item.value) + '</div>\n        </div>\n      ').join('');
+
+      const liveWorkers = workerEntries.map(([accountId, workerNo]) => {
+        const list = getSelectedList();
+        const account = list?.accounts?.find(item => String(item.id) === String(accountId));
+        return { workerNo, email: account?.email || ('Account #' + accountId) };
+      });
+
+      const lines = [
+        ...liveWorkers.map(item => ({ at: new Date().toISOString(), message: 'Worker ' + item.workerNo + ' dang chay ' + item.email })),
+        ...state.processLogs
+      ].slice(0, 40);
+
+      elements.processWorkers.innerHTML = lines.length ? lines.map(item => '\n        <div class="process-item">\n          <div class="process-item-time">' + escapeHtml(formatDate(item.at)) + '</div>\n          <div class="process-item-text">' + escapeHtml(item.message) + '</div>\n        </div>\n      ').join('') : '<div class="empty">Chua co process nao dang chay.</div>';
+    }
+
     function renderAccounts() {
       const list = getSelectedList();
       const count = list?.accounts.length || 0;
@@ -686,9 +805,10 @@
         <div class="account-item ${account.id === state.selectedAccountId ? 'active' : ''}" data-account-id="${account.id}">
           <div class="account-email">${escapeHtml(account.email)}</div>
           <div class="meta">Pass: ${escapeHtml(account.password || '-')}</div>
-          <div class="meta">Trạng thái: <span class="status-pill ${statusClass(account.status)}">${statusLabel(account.status)}</span></div>
-          <div class="meta">Code gần nhất: ${escapeHtml(account.last_code || '-')}</div>
-          <div class="meta">Lần cập nhật: ${escapeHtml(account.last_fetched_at ? formatDate(account.last_fetched_at) : '-')}</div>
+          <div class="meta">Trang thai: <span class="status-pill ${statusClass(account.status)}">${statusLabel(account.status)}</span></div>
+          <div class="meta">Worker: ${escapeHtml(state.activeWorkers[account.id] ? ('Worker ' + state.activeWorkers[account.id]) : '-')}</div>
+          <div class="meta">Code gan nhat: ${escapeHtml(account.last_code || '-')}</div>
+          <div class="meta">Lan cap nhat: ${escapeHtml(account.last_fetched_at ? formatDate(account.last_fetched_at) : '-')}</div>
         </div>
       `).join('');
       elements.accountsContainer.querySelectorAll('[data-account-id]').forEach(node => {
@@ -762,6 +882,13 @@
       renderAccounts();
       renderAccountDetail();
       renderSavedSessionsPanel();
+      renderProcessPanel();
+    }
+
+    function stopRunAllAccounts() {
+      state.runAllStopRequested = true;
+      pushProcessLog('Da yeu cau dung Run All. Worker se khong nhan account moi.');
+      showStatus('info', 'Da yeu cau dung Run All. Cac worker dang chay se hoan tat account hien tai, sau do dung.');
     }
 
     function bindClick(element, handler) {
@@ -801,6 +928,7 @@
     bindClick(elements.exportBtn, exportData);
     bindClick(elements.reloadListsBtn, () => hardReloadLists().catch(err => showStatus('error', err.message)));
     bindClick(elements.runAllBtn, () => runAllAccountsInList().catch(err => showStatus('error', err.message)));
+    bindClick(elements.stopRunAllBtn, stopRunAllAccounts);
     bindClick(elements.runBtn, () => runAccount().catch(err => showStatus('error', err.message)));
     bindClick(elements.getCodeBtn, () => fetchLatestCode().catch(err => showStatus('error', err.message)));
     bindClick(elements.copyCodeBtn, copyCode);

@@ -764,6 +764,27 @@ app.delete('/api/accounts/:id', (req, res) => {
   res.json({ lists: getListsWithAccounts() });
 });
 
+app.post('/api/accounts/:id/claim-run', (req, res) => {
+  const id = Number(req.params.id);
+  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
+
+  if (!account) {
+    return res.status(404).json({ error: 'Khong tim thay tai khoan.' });
+  }
+
+  if (String(account.status || '').toLowerCase() !== 'pending') {
+    return res.status(409).json({ error: 'Tai khoan khong con o trang thai pending.', account, lists: getListsWithAccounts() });
+  }
+
+  const result = db.prepare("UPDATE accounts SET status = 'inprocess', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'").run(id);
+  if (!result.changes) {
+    const fresh = db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
+    return res.status(409).json({ error: 'Tai khoan da duoc worker khac nhan.', account: fresh, lists: getListsWithAccounts() });
+  }
+
+  res.json({ ok: true, account: db.prepare('SELECT * FROM accounts WHERE id = ?').get(id), lists: getListsWithAccounts() });
+});
+
 app.get('/api/accounts/:id/run-status', (req, res) => {
   const id = Number(req.params.id);
   const status = runStatusStore.get(id) || { running: false, steps: [], updatedAt: '', error: '', message: '' };
