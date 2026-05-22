@@ -143,11 +143,26 @@
           <div class="field-inline">
             <label for="runAllWorkers">Workers</label>
             <select id="runAllWorkers">
-              <option value="1">1 worker</option>
+              <option value="1">1 workers</option>
               <option value="2">2 workers</option>
               <option value="3">3 workers</option>
               <option value="4">4 workers</option>
               <option value="5">5 workers</option>
+              <option value="6">6 workers</option>
+              <option value="7">7 workers</option>
+              <option value="8">8 workers</option>
+              <option value="9">9 workers</option>
+              <option value="10">10 workers</option>
+              <option value="11">11 workers</option>
+              <option value="12">12 workers</option>
+              <option value="13">13 workers</option>
+              <option value="14">14 workers</option>
+              <option value="15">15 workers</option>
+              <option value="16">16 workers</option>
+              <option value="17">17 workers</option>
+              <option value="18">18 workers</option>
+              <option value="19">19 workers</option>
+              <option value="20">20 workers</option>
             </select>
           </div>
           <button id="runAllBtn" class="btn-primary" type="button">Run tat ca tai khoan pending</button>
@@ -225,7 +240,8 @@
       runAllStopRequested: false,
       activeWorkers: {},
       processStats: { running: false, total: 0, completed: 0, success: 0, fail: 0, skip: 0, workers: 0 },
-      processLogs: []
+      processLogs: [],
+      workerStatusTimers: {}
     };
 
     const elements = {
@@ -597,11 +613,12 @@
       }
 
       const requestedWorkers = Number(elements.runAllWorkers?.value || 1);
-      const workerCount = Math.max(1, Math.min(5, requestedWorkers, pendingAccounts.length));
+      const workerCount = Math.max(1, Math.min(20, requestedWorkers, pendingAccounts.length));
 
       stopRunStatusPolling();
       state.runAllStopRequested = false;
       state.activeWorkers = {};
+      state.processLogs = [];
       let completed = 0;
       let successCount = 0;
       let failedCount = 0;
@@ -612,18 +629,29 @@
       pushProcessLog('Bat dau Run All voi ' + workerCount + ' worker va ' + total + ' tai khoan pending.');
 
       const runOneAccount = async (account, workerNo) => {
+        const listIndex = pendingAccounts.findIndex(item => item.id === account.id) + 1;
         const claim = await api('/api/accounts/' + account.id + '/claim-run', { method: 'POST' });
         state.lists = claim.lists || state.lists;
-        state.activeWorkers[account.id] = workerNo;
+        state.activeWorkers[account.id] = {
+          workerNo,
+          email: account.email,
+          listIndex,
+          stage: 'Da nhan account, dang khoi tao flow',
+          updatedAt: new Date().toISOString(),
+          running: true
+        };
+        startWorkerRealtime(account.id);
+        pushProcessLog('Worker ' + workerNo + ' nhan ' + account.email + ' | SST ' + listIndex + '.');
         state.selectedListId = list.id;
         state.selectedAccountId = account.id;
         state.lastResult = { message: '', error: '', steps: [], running: true, url: '' };
         render();
-        showStatus('info', 'Worker ' + workerNo + ': dang chay ' + account.email + ' | tien do ' + completed + '/' + total);
+        showStatus('info', 'Worker ' + workerNo + ': dang chay ' + account.email + ' | SST ' + listIndex + ' | tien do ' + completed + '/' + total);
 
         try {
           const data = await api('/api/accounts/' + account.id + '/run', { method: 'POST' });
           successCount += 1;
+          pushProcessLog('Worker ' + workerNo + ' hoan tat thanh cong ' + account.email + '.');
           if (state.selectedAccountId === account.id) {
             state.lastResult = {
               message: data.message || '',
@@ -634,6 +662,7 @@
           }
         } catch (error) {
           failedCount += 1;
+          pushProcessLog('Worker ' + workerNo + ' gap loi voi ' + account.email + ': ' + (error.message || 'Unknown error'));
           if (state.selectedAccountId === account.id) {
             state.lastResult = {
               error: error.message || 'Khong mo duoc browser.',
@@ -642,8 +671,10 @@
             };
           }
         } finally {
+          stopWorkerRealtime(account.id);
           delete state.activeWorkers[account.id];
           completed += 1;
+          state.processStats = { running: true, total, completed, success: successCount, fail: failedCount, skip: skippedCount, workers: workerCount };
           await loadLists();
           state.selectedListId = list.id;
           render();
@@ -665,6 +696,8 @@
             const message = String(error.message || '');
             if (message.includes('Tai khoan khong con o trang thai pending') || message.includes('Tai khoan da duoc worker khac nhan')) {
               skippedCount += 1;
+              state.processStats = { running: true, total, completed, success: successCount, fail: failedCount, skip: skippedCount, workers: workerCount };
+              pushProcessLog('Worker ' + workerNo + ' bo qua account do da duoc worker khac nhan.');
               await loadLists();
               render();
               continue;
@@ -680,7 +713,10 @@
       render();
       const stoppedNote = state.runAllStopRequested ? ' | da dung nhan them account moi' : '';
       state.runAllStopRequested = false;
+      Object.keys(state.workerStatusTimers).forEach(stopWorkerRealtime);
       state.activeWorkers = {};
+      state.processStats = { running: false, total, completed, success: successCount, fail: failedCount, skip: skippedCount, workers: workerCount };
+      pushProcessLog('Run All ket thuc. success=' + successCount + ', fail=' + failedCount + ', skip=' + skippedCount + '.');
       showStatus('success', 'Da chay xong ' + completed + '/' + total + ' tai khoan pending | success: ' + successCount + ' | fail: ' + failedCount + ' | skip: ' + skippedCount + ' | workers: ' + workerCount + stoppedNote);
     }
 
@@ -760,6 +796,40 @@
       });
     }
 
+    function updateWorkerStage(accountId, patch = {}) {
+      const current = state.activeWorkers[accountId] || {};
+      state.activeWorkers[accountId] = { ...current, ...patch };
+    }
+
+    async function startWorkerRealtime(accountId) {
+      stopWorkerRealtime(accountId);
+      state.workerStatusTimers[accountId] = setInterval(async () => {
+        try {
+          const data = await api('/api/accounts/' + accountId + '/run-status');
+          const steps = Array.isArray(data.steps) ? data.steps : [];
+          const latestStep = steps.length ? steps[steps.length - 1] : null;
+          updateWorkerStage(accountId, {
+            running: Boolean(data.running),
+            stage: latestStep?.message || data.message || data.error || 'Dang xu ly',
+            updatedAt: data.updatedAt || new Date().toISOString(),
+            stepCount: steps.length
+          });
+          renderProcessPanel();
+          renderAccounts();
+          if (!data.running) {
+            stopWorkerRealtime(accountId);
+          }
+        } catch {}
+      }, 1000);
+    }
+
+    function stopWorkerRealtime(accountId) {
+      if (state.workerStatusTimers[accountId]) {
+        clearInterval(state.workerStatusTimers[accountId]);
+        delete state.workerStatusTimers[accountId];
+      }
+    }
+
     function pushProcessLog(message) {
       state.processLogs.unshift({ at: new Date().toISOString(), message });
       state.processLogs = state.processLogs.slice(0, 40);
@@ -773,20 +843,24 @@
         { label: 'Workers', value: String(stats.workers || 0) },
         { label: 'Progress', value: (stats.completed || 0) + '/' + (stats.total || 0) },
         { label: 'Result', value: 'OK ' + (stats.success || 0) + ' | Fail ' + (stats.fail || 0) + ' | Skip ' + (stats.skip || 0) }
-      ].map(item => '\n        <div class="process-card">\n          <div class="process-label">' + escapeHtml(item.label) + '</div>\n          <div class="process-value">' + escapeHtml(item.value) + '</div>\n        </div>\n      ').join('');
+      ].map(item => '<div class="process-card"><div class="process-label">' + escapeHtml(item.label) + '</div><div class="process-value">' + escapeHtml(item.value) + '</div></div>').join('');
 
-      const liveWorkers = workerEntries.map(([accountId, workerNo]) => {
-        const list = getSelectedList();
-        const account = list?.accounts?.find(item => String(item.id) === String(accountId));
-        return { workerNo, email: account?.email || ('Account #' + accountId) };
-      });
+      const liveWorkers = workerEntries.map(([accountId, workerInfo]) => ({
+        workerNo: workerInfo?.workerNo || '-',
+        email: workerInfo?.email || ('Account #' + accountId),
+        listIndex: workerInfo?.listIndex || '-',
+        stage: workerInfo?.stage || 'Dang xu ly',
+        updatedAt: workerInfo?.updatedAt || new Date().toISOString()
+      }));
 
       const lines = [
-        ...liveWorkers.map(item => ({ at: new Date().toISOString(), message: 'Worker ' + item.workerNo + ' dang chay ' + item.email })),
+        ...liveWorkers.map(item => ({ at: item.updatedAt, message: 'Worker ' + item.workerNo + ' | SST ' + item.listIndex + ' | ' + item.email + ' | Stage: ' + item.stage })),
         ...state.processLogs
-      ].slice(0, 40);
+      ].slice(0, 60);
 
-      elements.processWorkers.innerHTML = lines.length ? lines.map(item => '\n        <div class="process-item">\n          <div class="process-item-time">' + escapeHtml(formatDate(item.at)) + '</div>\n          <div class="process-item-text">' + escapeHtml(item.message) + '</div>\n        </div>\n      ').join('') : '<div class="empty">Chua co process nao dang chay.</div>';
+      elements.processWorkers.innerHTML = lines.length
+        ? lines.map(item => '<div class="process-item"><div class="process-item-time">' + escapeHtml(formatDate(item.at)) + '</div><div class="process-item-text">' + escapeHtml(item.message) + '</div></div>').join('')
+        : '<div class="empty">Chua co process nao dang chay.</div>';
     }
 
     function renderAccounts() {
@@ -806,7 +880,9 @@
           <div class="account-email">${escapeHtml(account.email)}</div>
           <div class="meta">Pass: ${escapeHtml(account.password || '-')}</div>
           <div class="meta">Trang thai: <span class="status-pill ${statusClass(account.status)}">${statusLabel(account.status)}</span></div>
-          <div class="meta">Worker: ${escapeHtml(state.activeWorkers[account.id] ? ('Worker ' + state.activeWorkers[account.id]) : '-')}</div>
+          <div class="meta">Worker: ${escapeHtml(state.activeWorkers[account.id]?.workerNo ? ('Worker ' + state.activeWorkers[account.id].workerNo) : '-')}</div>
+          <div class="meta">SST: ${escapeHtml(String((list.accounts.findIndex(item => item.id === account.id) || 0) + 1))}</div>
+          <div class="meta">Stage: ${escapeHtml(state.activeWorkers[account.id]?.stage || '-')}</div>
           <div class="meta">Code gan nhat: ${escapeHtml(account.last_code || '-')}</div>
           <div class="meta">Lan cap nhat: ${escapeHtml(account.last_fetched_at ? formatDate(account.last_fetched_at) : '-')}</div>
         </div>

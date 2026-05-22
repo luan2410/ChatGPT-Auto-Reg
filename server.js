@@ -34,6 +34,14 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.static(__dirname));
 
 initDb();
+recoverStaleInprocessAccounts();
+
+function recoverStaleInprocessAccounts() {
+  const result = db.prepare("UPDATE accounts SET status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE status = 'inprocess'").run();
+  if (result.changes > 0) {
+    console.log('[startup] reset ' + result.changes + ' stale inprocess account(s) ve pending');
+  }
+}
 
 function initDb() {
   db.exec(`
